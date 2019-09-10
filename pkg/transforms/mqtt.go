@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/edgexfoundry/app-functions-sdk-go/appsdk"
@@ -15,26 +16,29 @@ import (
 
 const (
 	awsIoTMQTTHost           = "AwsIoTMQTTHost"
-	awsIoTMQTTPort           = 8883
+	awsIoTMQTTPort           = "AwsIoTMQTTPort"
 	awsIoTThingName          = "awsIoTThingName"
 	awsIoTRootCAFilename     = "CaCertPath"
 	awsIoTCertFilename       = "MQTTCert"
 	awsIoTPrivateKeyFilename = "MQTTKey"
 	user                     = "someUser"
+	topic                    = "topic"
 )
 
 var log logger.LoggingClient
 
-type certPair struct {
-	Cert string `json:"cert,omitempty"`
-	Key  string `json:"key,omitempty"`
-}
+// type certPair struct {
+// 	Cert string `json:"cert,omitempty"`
+// 	Key  string `json:"key,omitempty"`
+// }
 
 // AWSMQTTConfig holds AWS IoT specific information
 type AWSMQTTConfig struct {
 	MQTTConfig  *sdkTransforms.MqttConfig
 	IoTHost     string
+	IoTPort     string
 	IoTDevice   string
+	IoTTopic    string
 	KeyCertPair *sdkTransforms.KeyCertPair
 }
 
@@ -50,6 +54,7 @@ func getAppSetting(settings map[string]string, name string) string {
 	value, ok := settings[name]
 
 	if ok {
+		log.Debug(value)
 		return value
 	}
 	log.Error(fmt.Sprintf("ApplicationName application setting %s not found", name))
@@ -65,14 +70,16 @@ func LoadAWSMQTTConfig(sdk *appsdk.AppFunctionsSDK) (*AWSMQTTConfig, error) {
 
 	log = sdk.LoggingClient
 
-	var ioTHost, iotDevice, mqttCert, mqttKey string
+	var ioTHost, iotPort, iotDevice, mqttCert, mqttKey, ioTTopic string
 
 	appSettings := sdk.ApplicationSettings()
 	if appSettings != nil {
 		ioTHost = getAppSetting(appSettings, awsIoTMQTTHost)
+		iotPort = getAppSetting(appSettings, awsIoTMQTTPort)
 		iotDevice = getAppSetting(appSettings, awsIoTThingName)
 		mqttCert = getAppSetting(appSettings, awsIoTCertFilename)
 		mqttKey = getAppSetting(appSettings, awsIoTPrivateKeyFilename)
+		ioTTopic = getAppSetting(appSettings, topic)
 	} else {
 		return nil, errors.New("No application-specific settings found")
 	}
@@ -80,7 +87,9 @@ func LoadAWSMQTTConfig(sdk *appsdk.AppFunctionsSDK) (*AWSMQTTConfig, error) {
 	config := AWSMQTTConfig{}
 
 	config.IoTHost = ioTHost
+	config.IoTPort = iotPort
 	config.IoTDevice = iotDevice
+	config.IoTTopic = ioTTopic
 	config.MQTTConfig = sdkTransforms.NewMqttConfig()
 
 	pair := &sdkTransforms.KeyCertPair{
@@ -96,18 +105,22 @@ func LoadAWSMQTTConfig(sdk *appsdk.AppFunctionsSDK) (*AWSMQTTConfig, error) {
 // NewAWSMQTTSender return a mqtt sender capable of sending the event's value to the given MQTT broker
 func NewAWSMQTTSender(logging logger.LoggingClient, config *AWSMQTTConfig) *sdkTransforms.MQTTSender {
 
-	// TODO: configurable topic?
+	logging.Debug(config.IoTTopic)
 
-	topic := fmt.Sprintf("thing/%s/messages/", config.IoTDevice)
+	port, err := strconv.Atoi(config.IoTPort)
+	if err != nil {
+		// falling back to default AWS IoT port
+		port = 8883
+	}
 
 	addressable := models.Addressable{
-		Address:   awsIoTMQTTHost,
-		Port:      awsIoTMQTTPort,
+		Address:   config.IoTHost,
+		Port:      port,
 		Protocol:  "tls",
-		Publisher: awsIoTThingName,
+		Publisher: config.IoTDevice,
 		User:      "",
 		Password:  "",
-		Topic:     topic,
+		Topic:     config.IoTTopic,
 	}
 
 	mqttSender := sdkTransforms.NewMQTTSender(logging, addressable, config.KeyCertPair, config.MQTTConfig)
