@@ -1,0 +1,52 @@
+[Writable]
+LogLevel = 'DEBUG'
+
+[Service]
+BootTimeout = 30000
+ClientMonitor = 15000
+CheckInterval = '10s'
+Host = 'localhost'
+Port = 48095
+Protocol = 'http'
+ReadMaxLimit = 100
+StartupMsg = 'AWS IoT Export Service'
+Timeout = 5000
+
+[Registry]
+Host = 'localhost'
+Port = 8500
+Type = 'consul'
+
+[Clients]
+  [Clients.CoreData]
+  Protocol = 'http'
+  Host = 'localhost'
+  Port = 48080
+
+[MessageBus]
+Type = 'zero'
+    [MessageBus.PublishHost]
+        Host = '*'
+        Port = 5564
+        Protocol = 'tcp'
+    [MessageBus.SubscribeHost]
+        Host = 'localhost'
+        Port = 5563
+        Protocol = 'tcp'
+
+[Logging]
+EnableRemote = false
+File = './logs/aws-export.log'
+
+[Binding]
+Type="messagebus"
+SubscribeTopic="events"
+PublishTopic=""
+
+[ApplicationSettings]
+AwsIoTMQTTHost      = "xxxxx.iot.us-west-2.amazonaws.com"
+AwsIoTMQTTPort      = 8883
+awsIoTThingName     = "testThing"
+MQTTCert            = "/path/to/certdir/cert.pem"
+MQTTKey             = "/path/to/certdir/private.key"
+CaCertPath            = "/path/to/certdir/ca.cert."
